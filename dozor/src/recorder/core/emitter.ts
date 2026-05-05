@@ -17,7 +17,7 @@ export interface DozorEventMap {
 
 // ── Emitter class ────────────────────────────────────
 
-type Handler<T> = T extends void ? () => void : (data: T) => void;
+export type Handler<T> = T extends void ? () => void : (data: T) => void;
 
 /** Events that are too noisy to log by default (emitted on every rrweb event). */
 const SILENT_EVENTS = new Set<keyof DozorEventMap>(["event:buffered"]);

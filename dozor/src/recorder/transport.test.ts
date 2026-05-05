@@ -1,5 +1,5 @@
 import type { eventWithTime } from "rrweb";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import type { IngestPayload } from "../types";
 import { createLogger } from "./logger";
 import { Transport } from "./transport";
@@ -25,11 +25,11 @@ function mockResponse(status: number): Response {
 
 describe("Transport", () => {
   let transport: Transport;
-  let fetchMock: ReturnType<typeof vi.fn>;
+  let fetchMock: Mock<typeof fetch>;
 
   beforeEach(() => {
     vi.useFakeTimers();
-    fetchMock = vi.fn();
+    fetchMock = vi.fn<typeof fetch>();
     vi.stubGlobal("fetch", fetchMock);
     transport = new Transport(ENDPOINT, API_KEY, createLogger(false), TIMEOUT);
   });
@@ -55,7 +55,7 @@ describe("Transport", () => {
 
       await transport.send(makePayload());
 
-      const [url, init] = fetchMock.mock.calls[0]!;
+      const [url, init] = fetchMock.mock.calls[0]! as [string, RequestInit & { headers: Record<string, string> }];
       expect(url).toBe(ENDPOINT);
       expect(init.method).toBe("POST");
       expect(init.headers["X-Dozor-Public-Key"]).toBe(API_KEY);
@@ -130,7 +130,7 @@ describe("Transport", () => {
 
       await transport.send(makePayload(1, 10));
 
-      const init = fetchMock.mock.calls[0]![1];
+      const init = fetchMock.mock.calls[0]![1] as RequestInit & { headers: Record<string, string> };
       expect(init.headers["Content-Encoding"]).toBeUndefined();
       expect(typeof init.body).toBe("string");
     });
@@ -171,7 +171,7 @@ describe("Transport", () => {
 
       transport.sendKeepalive(makePayload(1));
 
-      const init = fetchMock.mock.calls[0]![1];
+      const init = fetchMock.mock.calls[0]![1] as RequestInit & { headers: Record<string, string> };
       expect(init.keepalive).toBe(true);
       expect(init.headers["Content-Type"]).toBe("application/json");
     });
@@ -183,7 +183,7 @@ describe("Transport", () => {
       const payload = makePayload(200, 500);
       transport.sendKeepalive(payload);
 
-      const init = fetchMock.mock.calls[0]![1];
+      const init = fetchMock.mock.calls[0]![1] as RequestInit;
       const body = JSON.parse(init.body as string);
       // Trimmed payload must fit under the cap and preserve order from the tail.
       expect(body.events.length).toBeLessThan(200);

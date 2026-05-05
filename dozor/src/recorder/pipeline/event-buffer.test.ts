@@ -1,7 +1,7 @@
 import type { eventWithTime } from "rrweb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionMetadata, SliceMarker, UserIdentity } from "../../types";
-import { Emitter } from "../core/emitter";
+import { Emitter, type DozorEventMap, type Handler } from "../core/emitter";
 import { createLogger } from "../logger";
 import { EventBuffer } from "./event-buffer";
 
@@ -52,7 +52,7 @@ describe("EventBuffer", () => {
     });
 
     it("emits event:buffered with the new buffer size", () => {
-      const handler = vi.fn();
+      const handler = vi.fn<Handler<DozorEventMap["event:buffered"]>>();
       emitter.on("event:buffered", handler);
 
       buffer.push(makeEvent(), 0);
