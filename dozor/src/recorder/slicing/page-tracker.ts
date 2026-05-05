@@ -3,12 +3,9 @@ import type { Logger } from "../logger";
 export type PageChangeCallback = (url: string, pathname: string) => void;
 
 /**
- * Monitors pathname changes in single-page applications.
- * Intercepts `history.pushState`, `history.replaceState`, and the `popstate` event.
- *
- * Hash-only and query-only changes are intentionally ignored — they don't
- * represent a real page navigation and would otherwise produce spurious
- * slice markers (e.g. `#section` anchor jumps, `?utm=...` rewrites).
+ * Monkey-patches `pushState` / `replaceState` + listens to `popstate`. Hash-only and
+ * query-only changes are ignored — `#section` jumps and `?utm=` rewrites aren't real
+ * navigations and would otherwise produce spurious slice markers.
  */
 export class PageTracker {
   private callback: PageChangeCallback;
@@ -24,27 +21,22 @@ export class PageTracker {
 
     this.logger.log("PageTracker: initialized (pathname: %s)", this.lastPathname);
 
-    // Save originals
     this.origPushState = history.pushState.bind(history);
     this.origReplaceState = history.replaceState.bind(history);
 
-    // Monkey-patch pushState
     history.pushState = (...args: Parameters<typeof history.pushState>) => {
       this.origPushState(...args);
       this.check();
     };
 
-    // Monkey-patch replaceState
     history.replaceState = (...args: Parameters<typeof history.replaceState>) => {
       this.origReplaceState(...args);
       this.check();
     };
 
-    // Browser back/forward
     addEventListener("popstate", this.onPopState);
   }
 
-  /** Remove listeners and restore original history methods. */
   destroy(): void {
     history.pushState = this.origPushState;
     history.replaceState = this.origReplaceState;

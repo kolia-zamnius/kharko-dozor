@@ -16,7 +16,6 @@ export class FlushScheduler {
     this.batchSize = options.batchSize;
   }
 
-  /** Start the periodic flush timer and batch-size listener. */
   start(): void {
     this.stop();
     this.logger.log("FlushScheduler: started (interval: %dms, batchSize: %d)", this.interval, this.batchSize);
@@ -34,7 +33,7 @@ export class FlushScheduler {
     }, this.interval);
   }
 
-  /** Stop the timer and remove the listener (no final flush). */
+  /** Stops timer + listener; caller drains explicitly if a final flush is needed. */
   stop(): void {
     if (this.timer) {
       clearInterval(this.timer);

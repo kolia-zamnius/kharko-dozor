@@ -2,7 +2,7 @@ import type { Logger } from "../logger";
 
 const SESSION_KEY = "dozor_session_id";
 
-/** Get or create a session ID persisted in sessionStorage for SPA continuity. */
+/** Tab-scoped: `sessionStorage` (not `localStorage`) so SPA navigations keep one session and a new tab gets a fresh one. */
 export function getSessionId(logger: Logger): string {
   try {
     const existing = sessionStorage.getItem(SESSION_KEY);
@@ -11,7 +11,7 @@ export function getSessionId(logger: Logger): string {
       return existing;
     }
   } catch {
-    // sessionStorage unavailable (SSR, iframe sandbox, etc.)
+    // SSR or sandbox iframe — fall through to a fresh in-memory ID.
     logger.warn("Session: sessionStorage unavailable — ID will not persist");
   }
 
@@ -21,13 +21,12 @@ export function getSessionId(logger: Logger): string {
   try {
     sessionStorage.setItem(SESSION_KEY, id);
   } catch {
-    // best-effort persistence
+    // best-effort
   }
 
   return id;
 }
 
-/** Remove the session ID from sessionStorage so the next init() creates a fresh session. */
 export function clearSessionId(logger: Logger): void {
   logger.log("Session: cleared");
   try {

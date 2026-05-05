@@ -2,18 +2,12 @@ import type { DozorState } from "../../types";
 import type { Logger } from "../logger";
 import type { Emitter } from "./emitter";
 
-// ── States (discriminated union) ─────────────────────
-
 export type RecorderState =
   | { status: "idle" }
   | { status: "recording"; pauseReason: null }
   | { status: "paused"; pauseReason: "user" | "visibility" };
 
-// ── Transitions ──────────────────────────────────────
-
 export type Transition = "START" | "PAUSE" | "AUTO_PAUSE" | "RESUME" | "STOP" | "CANCEL";
-
-// ── Machine ──────────────────────────────────────────
 
 export class StateMachine {
   private _state: RecorderState = { status: "idle" };
@@ -29,20 +23,15 @@ export class StateMachine {
     return this._state;
   }
 
-  /** Public API-compatible status string. */
   get status(): DozorState {
     return this._state.status;
   }
 
-  /** Check if a transition is currently valid. */
   can(action: Transition): boolean {
     return this.resolve(action) !== null;
   }
 
-  /**
-   * Attempt a transition. Returns `true` on success.
-   * Emits `"state:change"` when the state actually changes.
-   */
+  /** Emits `state:change` on success. */
   transition(action: Transition): boolean {
     const next = this.resolve(action);
     if (!next) {
@@ -57,14 +46,11 @@ export class StateMachine {
     return true;
   }
 
-  // ── Transition table ─────────────────────────────────
-  //
-  //  From \ Action   START        PAUSE          AUTO_PAUSE        RESUME      STOP   CANCEL
-  //  idle            recording    –              –                 –           –      –
-  //  recording       –            paused(user)   paused(visibility)–           idle   idle
-  //  paused(user)    –            –              –                 recording   idle   idle
-  //  paused(vis.)    –            –              –                 recording   idle   idle
-
+  //  From \ Action   START        PAUSE          AUTO_PAUSE         RESUME      STOP   CANCEL
+  //  idle            recording    –              –                  –           –      –
+  //  recording       –            paused(user)   paused(visibility) –           idle   idle
+  //  paused(user)    –            –              –                  recording   idle   idle
+  //  paused(vis.)    –            –              –                  recording   idle   idle
   private resolve(action: Transition): RecorderState | null {
     const { status } = this._state;
 

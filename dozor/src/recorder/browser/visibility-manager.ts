@@ -13,10 +13,10 @@ export class VisibilityManager {
     this.onVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         logger.log("VisibilityManager: tab hidden → keepalive flush");
-        // Use `unload` reason so the flush goes through `sendKeepalive`.
-        // Regular `send()` would race the tab close and get cancelled, dropping
-        // the user's last actions. iOS Safari skips `beforeunload` entirely on
-        // tab close, so this is the only reliable hook for "page going away".
+        // `unload` reason routes flush through `sendKeepalive`. Regular `send()` would race
+        // tab-close and get cancelled, dropping the user's last actions. iOS Safari skips
+        // `beforeunload` entirely on tab close — `visibilitychange:hidden` is the only
+        // reliable "page going away" hook there.
         emitter.emit("flush:trigger", { reason: "unload" });
         if (pauseOnHidden) {
           logger.log("VisibilityManager: tab hidden → auto-pausing");
@@ -30,9 +30,8 @@ export class VisibilityManager {
 
     this.onBeforeUnload = () => {
       logger.log("VisibilityManager: beforeunload → keepalive flush");
-      // `visibilitychange:hidden` already drained the buffer via keepalive on
-      // most browsers. Kept as a belt-and-braces hook for the rare path where
-      // beforeunload fires without a prior hidden transition.
+      // Belt-and-braces: `visibilitychange:hidden` already drained on most browsers, this
+      // catches the rare path where `beforeunload` fires without a prior hidden transition.
       emitter.emit("flush:trigger", { reason: "unload" });
     };
 
