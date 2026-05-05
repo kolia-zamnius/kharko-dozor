@@ -66,8 +66,4 @@ export class SliceManager {
     this._index = 0;
     this._isSnapshotting = false;
   }
-
-  dispose(): void {
-    this.reset();
-  }
 }

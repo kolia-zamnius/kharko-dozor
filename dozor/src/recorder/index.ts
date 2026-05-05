@@ -31,7 +31,6 @@ export class Dozor {
   private idleDetector: IdleDetector;
   private sliceManager: SliceManager;
   private flushScheduler: FlushScheduler;
-  private visibilityManager: VisibilityManager;
   private transport: Transport;
   private pageTracker: PageTracker | null = null;
   private logger: Logger;
@@ -87,7 +86,10 @@ export class Dozor {
       interval: flushInterval,
       batchSize,
     });
-    this.visibilityManager = new VisibilityManager(this.emitter, this.logger, {
+    // Side-effect-only: registers `addEventListener("visibilitychange"/"beforeunload", ...)`.
+    // The wrapper isn't held — listeners are kept alive by the global registry, the singleton
+    // outlives the page.
+    new VisibilityManager(this.emitter, this.logger, {
       pauseOnHidden: options.pauseOnHidden ?? true,
     });
 

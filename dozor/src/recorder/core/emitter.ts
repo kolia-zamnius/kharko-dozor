@@ -49,12 +49,4 @@ export class Emitter {
       (handler as Function)(...args);
     }
   }
-
-  off<K extends keyof DozorEventMap>(event: K, handler: Handler<DozorEventMap[K]>): void {
-    this.handlers.get(event)?.delete(handler);
-  }
-
-  clear(): void {
-    this.handlers.clear();
-  }
 }
