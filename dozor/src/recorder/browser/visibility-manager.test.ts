@@ -54,11 +54,14 @@ describe("VisibilityManager", () => {
       manager = new VisibilityManager(emitter, createLogger(false), { pauseOnHidden: true });
     });
 
-    it("on hidden: emits flush trigger and visibility:hidden", () => {
+    it("on hidden: emits keepalive flush and visibility:hidden", () => {
       setVisibility("hidden");
       fireVisibilityChange();
 
-      expect(flushHandler).toHaveBeenCalledWith({ reason: "manual" });
+      // `unload` reason routes the flush through `sendKeepalive` so the
+      // request survives the tab close — a regular `send()` would be
+      // cancelled mid-flight and the user's last actions would be lost.
+      expect(flushHandler).toHaveBeenCalledWith({ reason: "unload" });
       expect(visibilityHidden).toHaveBeenCalledOnce();
       expect(visibilityVisible).not.toHaveBeenCalled();
     });
@@ -77,11 +80,11 @@ describe("VisibilityManager", () => {
       manager = new VisibilityManager(emitter, createLogger(false), { pauseOnHidden: false });
     });
 
-    it("on hidden: still flushes but does not emit visibility:hidden", () => {
+    it("on hidden: still flushes (keepalive) but does not emit visibility:hidden", () => {
       setVisibility("hidden");
       fireVisibilityChange();
 
-      expect(flushHandler).toHaveBeenCalledWith({ reason: "manual" });
+      expect(flushHandler).toHaveBeenCalledWith({ reason: "unload" });
       expect(visibilityHidden).not.toHaveBeenCalled();
     });
 
