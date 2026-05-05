@@ -20,7 +20,6 @@ export class IdleDetector {
     return this._isIdle;
   }
 
-  /** Subscribe to activity signals and start the timer. */
   start(): void {
     this.dispose();
     this.logger.log("IdleDetector: started (threshold: %dms)", this.threshold);
@@ -29,11 +28,9 @@ export class IdleDetector {
   }
 
   /**
-   * Reset the idle timer. Throttled: skips the timer restart if called
-   * within 1 s of the last reset, since high-frequency rrweb events
-   * (mouse moves, mutations) don't need to churn the timer on every event.
-   *
-   * Always clears the idle flag immediately — any activity means "not idle".
+   * Throttled at 1 s — high-frequency rrweb events (mouse moves, mutations)
+   * shouldn't churn the timer on every tick. Idle flag clears immediately so
+   * any activity reads as "not idle" without waiting for the throttle window.
    */
   private resetTimer(): void {
     this._isIdle = false;
@@ -50,7 +47,6 @@ export class IdleDetector {
     }, this.threshold);
   }
 
-  /** Clean up timer and listener. */
   dispose(): void {
     this.unsubscribe?.();
     this.unsubscribe = null;

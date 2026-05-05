@@ -3,10 +3,8 @@ import type { IngestPayload, SessionMetadata, SliceMarker, UserIdentity } from "
 import type { Emitter } from "../core/emitter";
 import type { Logger } from "../logger";
 
-/** Hard cap on buffer size to prevent unbounded memory growth during extended offline periods. */
+/** Hard cap protects memory during extended offline windows; oldest events drop on overflow. */
 const MAX_BUFFER_SIZE = 10_000;
-
-// ── EventBuffer class ────────────────────────────────
 
 export class EventBuffer {
   private buffer: eventWithTime[] = [];
@@ -21,27 +19,25 @@ export class EventBuffer {
     this.logger = logger;
   }
 
-  /** Push an rrweb event, enrich with current slice index. */
   push(event: eventWithTime, sliceIndex: number): void {
     (event as eventWithTime & { sliceIndex: number }).sliceIndex = sliceIndex;
     this.buffer.push(event);
     this.emitter.emit("event:buffered", { bufferSize: this.buffer.length });
   }
 
-  /** Add a slice marker for the next drain. */
   addSliceMarker(marker: SliceMarker): void {
     this.sliceMarkers.push(marker);
     this.logger.log("EventBuffer: slice marker added (index: %d, reason: %s)", marker.index, marker.reason);
   }
 
-  /** Set session metadata (sent once on first drain). */
+  /** Sent once on the next drain. */
   setMetadata(metadata: SessionMetadata): void {
     this.metadata = metadata;
     this.metadataSent = false;
     this.logger.log("EventBuffer: metadata set", { url: metadata.url });
   }
 
-  /** Update user identity on metadata and force re-send on next drain. */
+  /** Forces metadata re-send on the next drain so the server learns the userId mid-session. */
   updateIdentity(identity: UserIdentity): void {
     if (this.metadata) {
       this.metadata.userIdentity = identity;
@@ -50,7 +46,6 @@ export class EventBuffer {
     this.logger.log("EventBuffer: identity updated (userId: %s)", identity.userId);
   }
 
-  /** Drain buffer into an IngestPayload. Returns `null` if empty. */
   drain(sessionId: string): IngestPayload | null {
     if (this.buffer.length === 0 && this.sliceMarkers.length === 0) {
       return null;
@@ -86,10 +81,7 @@ export class EventBuffer {
     return payload;
   }
 
-  /**
-   * Re-queue events at the front of the buffer (for retry after failed send).
-   * If the buffer exceeds `MAX_BUFFER_SIZE` after prepend, the oldest events are dropped.
-   */
+  /** Re-queue at the head after a failed send. Drops oldest if `MAX_BUFFER_SIZE` exceeded. */
   prepend(events: eventWithTime[], markers?: SliceMarker[]): void {
     this.buffer = [...events, ...this.buffer];
     if (markers?.length) {
@@ -105,7 +97,6 @@ export class EventBuffer {
     }
   }
 
-  /** Discard all buffered events and markers. */
   clear(): void {
     const count = this.buffer.length;
     this.buffer = [];

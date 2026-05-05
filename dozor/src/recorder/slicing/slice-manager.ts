@@ -22,12 +22,7 @@ export class SliceManager {
     return this._isSnapshotting;
   }
 
-  /**
-   * Start a new slice — increment index, emit marker, take full snapshot.
-   *
-   * The `_isSnapshotting` guard prevents `record.takeFullSnapshot()` events
-   * from re-entering the event callback and creating yet another slice.
-   */
+  /** `_isSnapshotting` guard prevents the snapshot's own events from re-entering `onEvent` and triggering another slice. */
   startNewSlice(reason: SliceReason, url?: string, pathname?: string): void {
     this._index++;
 
@@ -54,7 +49,6 @@ export class SliceManager {
     this._isSnapshotting = false;
   }
 
-  /** Create the initial (index 0) slice marker for session start. */
   createInitialMarker(): SliceMarker {
     this.logger.log("SliceManager: initial marker created (url: %s)", location.href);
     return {
@@ -68,7 +62,6 @@ export class SliceManager {
     };
   }
 
-  /** Reset state for a new session. */
   reset(): void {
     this._index = 0;
     this._isSnapshotting = false;

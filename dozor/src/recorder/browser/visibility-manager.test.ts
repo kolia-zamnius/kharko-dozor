@@ -58,9 +58,6 @@ describe("VisibilityManager", () => {
       setVisibility("hidden");
       fireVisibilityChange();
 
-      // `unload` reason routes the flush through `sendKeepalive` so the
-      // request survives the tab close — a regular `send()` would be
-      // cancelled mid-flight and the user's last actions would be lost.
       expect(flushHandler).toHaveBeenCalledWith({ reason: "unload" });
       expect(visibilityHidden).toHaveBeenCalledOnce();
       expect(visibilityVisible).not.toHaveBeenCalled();

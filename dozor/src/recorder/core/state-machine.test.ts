@@ -123,7 +123,6 @@ describe("StateMachine", () => {
         const actual = machine.transition(action);
         expect(actual).toBe(expected);
         if (actual) {
-          // reset for the next iteration
           ({ machine } = makeMachine());
         }
       }

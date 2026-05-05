@@ -1,7 +1,6 @@
 import type { SessionMetadata } from "../../types";
 import type { Logger } from "../logger";
 
-/** Collect session metadata from the browser environment. */
 export function collectMetadata(logger: Logger): SessionMetadata {
   const metadata: SessionMetadata = {
     url: location.href,

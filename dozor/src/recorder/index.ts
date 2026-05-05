@@ -25,8 +25,6 @@ const IDLE_THRESHOLD = 60_000;
 export class Dozor {
   private static instance: Dozor | null = null;
 
-  // ── Subsystems ───────────────────────────────────────
-
   private emitter: Emitter;
   private stateMachine: StateMachine;
   private eventBuffer: EventBuffer;
@@ -38,8 +36,6 @@ export class Dozor {
   private pageTracker: PageTracker | null = null;
   private logger: Logger;
 
-  // ── Instance state ───────────────────────────────────
-
   private _sessionId: string | null = null;
   private _isHeld: boolean;
   private _userIdentity: UserIdentity | null = null;
@@ -50,11 +46,7 @@ export class Dozor {
   private privacyBlockMedia: boolean;
   private privacyMaskInputs: boolean;
 
-  // ── Subscribers (external state observers) ──────────
-
   private subscribers = new Set<() => void>();
-
-  // ── Constructor ──────────────────────────────────────
 
   private constructor(options: DozorOptions) {
     const endpoint = options.endpoint;
@@ -85,7 +77,6 @@ export class Dozor {
       this.plugins.push(getRecordConsolePlugin());
     }
 
-    // Create subsystems
     this.emitter = new Emitter(this.logger);
     this.stateMachine = new StateMachine(this.emitter, this.logger);
     this.transport = new Transport(endpoint, options.apiKey, this.logger, fetchTimeout);
@@ -102,7 +93,7 @@ export class Dozor {
 
     this.wireEvents();
 
-    // Auto-start preserves _isHeld from options (unlike start() which resets it)
+    // autoStart preserves `_isHeld` from options; manual `start()` resets it to false.
     if (options.autoStart ?? true) {
       this.logger.log("init: auto-starting recording");
       this.beginSession();
@@ -114,12 +105,9 @@ export class Dozor {
     this.notify();
   }
 
-  // ── Event wiring (Mediator) ──────────────────────────
-
   private wireEvents(): void {
     const { emitter, logger } = this;
 
-    // Flush trigger → drain buffer → send via transport
     emitter.on("flush:trigger", ({ reason }) => {
       if (this._isHeld) {
         logger.log("flush: skipped (transport held, reason: %s)", reason);
@@ -150,7 +138,6 @@ export class Dozor {
                 success: true,
               });
             } else {
-              // Re-queue failed events for retry on next flush cycle
               this.eventBuffer.prepend(payload.events, payload.sliceMarkers);
               logger.warn("flush: re-queued %d events after failed send", payload.events.length);
               emitter.emit("flush:complete", {
@@ -160,7 +147,6 @@ export class Dozor {
             }
           })
           .catch((err) => {
-            // Unexpected error — re-queue events and report
             this.eventBuffer.prepend(payload.events, payload.sliceMarkers);
             logger.warn("flush: re-queued %d events after unexpected error", payload.events.length);
             emitter.emit("error", { source: "transport", error: err });
@@ -168,7 +154,6 @@ export class Dozor {
       }
     });
 
-    // Visibility hidden → auto-pause (if recording)
     emitter.on("visibility:hidden", () => {
       if (this.stateMachine.can("AUTO_PAUSE")) {
         logger.log("visibility: auto-pausing recording");
@@ -178,7 +163,7 @@ export class Dozor {
       }
     });
 
-    // Visibility visible → resume (only if auto-paused)
+    // Resume only if the pause was visibility-driven — manual pauses survive a tab-show.
     emitter.on("visibility:visible", () => {
       const { state } = this.stateMachine;
       if (state.status === "paused" && state.pauseReason === "visibility") {
@@ -189,85 +174,63 @@ export class Dozor {
       }
     });
 
-    // Slice created → add marker to event buffer
     emitter.on("slice:new", ({ marker }) => {
       this.eventBuffer.addSliceMarker(marker);
     });
 
-    // Error handler — log errors that would otherwise be silently swallowed
     emitter.on("error", ({ source, error }) => {
       this.logger.error("error from %s:", source, error);
     });
   }
 
-  // ── Static ──────────────────────────────────────────
-
-  /** Initialize the Dozor recorder. Returns the singleton instance. */
+  /** Singleton — repeat calls return the same instance, ignoring the new options. */
   static init(options: DozorOptions): Dozor {
     if (Dozor.instance) return Dozor.instance;
     Dozor.instance = new Dozor(options);
     return Dozor.instance;
   }
 
-  // ── Public properties ───────────────────────────────
-
-  /** Current session ID (UUID v4), or `null` before `start()`. */
   get sessionId(): string | null {
     return this._sessionId;
   }
 
-  /** `true` when actively recording. */
   get isRecording(): boolean {
     return this.stateMachine.status === "recording";
   }
 
-  /** `true` when paused via `pause()`. */
   get isPaused(): boolean {
     return this.stateMachine.status === "paused";
   }
 
-  /** Current lifecycle state. */
   get state(): DozorState {
     return this.stateMachine.status;
   }
 
-  /** `true` when transport is held — events are buffered locally but not sent. */
   get isHeld(): boolean {
     return this._isHeld;
   }
 
-  /** Current user ID, or `null` if not identified. */
   get userId(): string | null {
     return this._userIdentity?.userId ?? null;
   }
 
-  /** Number of events currently buffered in memory (not yet sent). */
   get bufferSize(): number {
     return this.eventBuffer.size;
   }
 
-  // ── Subscribe (external state observers) ───────────
-
-  /**
-   * Subscribe to state changes. The listener is called whenever any observable
-   * property changes (state, sessionId, isHeld, userId, bufferSize).
-   * Returns an unsubscribe function.
-   */
+  /** Fires on any observable change (state / sessionId / isHeld / userId / bufferSize). */
   subscribe(listener: () => void): () => void {
     this.subscribers.add(listener);
     return () => this.subscribers.delete(listener);
   }
 
-  /** Notify all subscribers that observable state has changed. */
   private notify(): void {
     for (const listener of this.subscribers) {
       listener();
     }
   }
 
-  // ── Lifecycle methods ───────────────────────────────
-
-  /** Start recording. Creates a fresh session each time. Only works from `idle` state. */
+  /** Fresh session each call. Only valid from `idle`. */
   start(): void {
     this.logger.log("start()");
     if (!this.stateMachine.can("START")) {
@@ -281,7 +244,7 @@ export class Dozor {
     this.notify();
   }
 
-  /** Pause recording without destroying the session. Keeps the session ID and buffered events alive. */
+  /** Keeps session ID + buffered events; `resume()` continues. */
   pause(): void {
     this.logger.log("pause()");
     if (!this.stateMachine.can("PAUSE")) {
@@ -293,7 +256,6 @@ export class Dozor {
     this.notify();
   }
 
-  /** Resume recording after a `pause()`. Continues the same session. */
   resume(): void {
     this.logger.log("resume()");
     if (!this.stateMachine.can("RESUME")) {
@@ -305,7 +267,7 @@ export class Dozor {
     this.notify();
   }
 
-  /** Stop recording, flush remaining events, and return to `idle`. Can `start()` a new session afterwards. */
+  /** Flushes buffer; subsequent `start()` creates a fresh session. */
   stop(): void {
     this.logger.log("stop()");
     if (!this.stateMachine.can("STOP")) {
@@ -320,7 +282,7 @@ export class Dozor {
     this.notify();
   }
 
-  /** Discard the current session. Drops buffered events and sends a delete request to the server. Returns to `idle`. */
+  /** Drops buffered events + posts cancel to server. Use to abandon a session. */
   cancel(): void {
     this.logger.log("cancel()");
     if (!this.stateMachine.can("CANCEL")) {
@@ -336,11 +298,7 @@ export class Dozor {
     this.notify();
   }
 
-  /**
-   * Hold the transport — recording continues but events are buffered locally without being sent.
-   * Use `release()` to flush the buffer and resume normal sending, or `cancel()` to discard everything.
-   * No-op if already held or idle.
-   */
+  /** Recording continues, events buffered locally until `release()` or `cancel()`. No-op when idle / already held. */
   hold(): void {
     this.logger.log("hold()");
     if (this.stateMachine.status === "idle" || this._isHeld) {
@@ -352,11 +310,7 @@ export class Dozor {
     this.notify();
   }
 
-  /**
-   * Release the transport hold — flush buffered events and resume normal sending.
-   * Pass `{ discard: true }` to drop held events without sending them.
-   * No-op if not held.
-   */
+  /** Flush held events; `{ discard: true }` drops them instead. No-op if not held. */
   release(options?: { discard?: boolean }): void {
     this.logger.log("release()", options);
     if (!this._isHeld) {
@@ -375,11 +329,7 @@ export class Dozor {
     this.notify();
   }
 
-  /**
-   * Identify the current user with an ID and optional traits (email, name, plan, etc.).
-   * Call this when the user logs in or when you know who they are.
-   * The identity is sent with the next batch and stored on the server.
-   */
+  /** Identity rides on metadata — sent on the next batch and on every later batch until session end. */
   identify(userId: string, traits?: UserTraits): void {
     this.logger.log("identify(): userId=%s", userId);
     this._userIdentity = { userId, traits };
@@ -387,9 +337,6 @@ export class Dozor {
     this.notify();
   }
 
-  // ── Private — session lifecycle ─────────────────────
-
-  /** Initialize a new session — generate ID, collect metadata, set up page tracking. */
   private beginSession(): void {
     this._sessionId = getSessionId(this.logger);
     this.eventBuffer.setMetadata(collectMetadata(this.logger));
@@ -403,7 +350,6 @@ export class Dozor {
     this.logger.log("beginSession: %s", this._sessionId);
   }
 
-  /** Tear down the current session — clear session ID, destroy page tracker. */
   private endSession(): void {
     this.logger.log("endSession: %s", this._sessionId);
     this.pageTracker?.destroy();
@@ -415,9 +361,6 @@ export class Dozor {
     this._userIdentity = null;
   }
 
-  // ── Private — rrweb lifecycle ───────────────────────
-
-  /** Start rrweb recording, flush scheduler, and idle detector. */
   private beginRecording(): void {
     this.logger.log("beginRecording: starting rrweb + scheduler + idle detector");
     const blockParts: string[] = [`[${this.privacyBlockAttribute}]`];
@@ -440,7 +383,6 @@ export class Dozor {
     this.idleDetector.start();
   }
 
-  /** Stop rrweb, flush scheduler, and idle detector (without flushing). */
   private teardownRecording(): void {
     this.logger.log("teardownRecording: stopping rrweb + scheduler + idle detector");
     if (this.stopRecording) {
@@ -451,10 +393,8 @@ export class Dozor {
     this.idleDetector.dispose();
   }
 
-  // ── Private — rrweb event callback ──────────────────
-
   private onEvent(event: eventWithTime): void {
-    // Idle resume: when activity returns after idle period, start a new slice
+    // First post-idle event → snapshot via new slice; the snapshot guard in SliceManager prevents recursion.
     if (this.idleDetector.isIdle && !this.sliceManager.isSnapshotting) {
       this.sliceManager.startNewSlice("idle");
     }

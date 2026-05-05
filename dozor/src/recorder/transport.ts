@@ -5,10 +5,8 @@ import type { Logger } from "./logger";
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 1000;
 const COMPRESSION_THRESHOLD = 1_024;
-/** Stay safely under browser's 64KB keepalive body limit. */
+/** Stay safely under the browser's 64 KB keepalive body limit. */
 const KEEPALIVE_BYTE_LIMIT = 60 * 1024;
-
-// ── Compression helpers ──────────────────────────────
 
 async function gzipCompress(input: string): Promise<Blob> {
   const stream = new Blob([input]).stream().pipeThrough(new CompressionStream("gzip"));
@@ -16,8 +14,6 @@ async function gzipCompress(input: string): Promise<Blob> {
 }
 
 const supportsCompression = typeof CompressionStream !== "undefined";
-
-// ── Transport class ──────────────────────────────────
 
 export class Transport {
   private endpoint: string;
@@ -33,7 +29,6 @@ export class Transport {
     this.logger.log("Transport created", { endpoint, timeout: this.timeout });
   }
 
-  /** Send a batch of events via fetch with compression + retry. */
   async send(payload: IngestPayload): Promise<boolean> {
     const json = JSON.stringify(payload);
 
@@ -70,7 +65,7 @@ export class Transport {
           return true;
         }
 
-        // Don't retry client errors (400, 401, etc.)
+        // 4xx is the server saying "your payload is wrong" — retrying won't fix it.
         if (res.status >= 400 && res.status < 500) {
           this.logger.warn("send: client error %d — not retrying", res.status);
           return false;
@@ -93,7 +88,7 @@ export class Transport {
     return false;
   }
 
-  /** Best-effort DELETE to remove a cancelled session from the server. */
+  /** Cancel URL is derived from the ingest URL by path replacement — works for canonical `/api/ingest` routes. */
   deleteSession(sessionId: string): void {
     this.logger.log("deleteSession: %s", sessionId);
     const cancelUrl = this.endpoint.replace("/ingest", "/sessions/cancel");
@@ -114,9 +109,8 @@ export class Transport {
   }
 
   /**
-   * Best-effort send via fetch with keepalive (for page unload).
-   * Synchronous — no compression because async operations may not complete before the page closes.
-   * Truncates oldest events if payload exceeds the keepalive byte limit.
+   * No compression — async ops may not flush before page close.
+   * Drops oldest events when payload exceeds `KEEPALIVE_BYTE_LIMIT` (keep most recent for context).
    */
   sendKeepalive(payload: IngestPayload): void {
     if (payload.events.length === 0 && !payload.sliceMarkers?.length) return;
@@ -128,7 +122,6 @@ export class Transport {
 
     let json = buildJson(trimmedEvents);
 
-    // If too large, estimate how many events fit and keep the MOST RECENT ones
     if (json.length > KEEPALIVE_BYTE_LIMIT && trimmedEvents.length > 1) {
       const overhead = buildJson([]).length;
       const available = KEEPALIVE_BYTE_LIMIT - overhead;
@@ -152,7 +145,7 @@ export class Transport {
         this.logger.warn("sendKeepalive: failed", err);
       });
     } catch {
-      // best-effort, ignore failures during unload
+      // fire-and-forget on unload
     }
   }
 }

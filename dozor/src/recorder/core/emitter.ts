@@ -1,8 +1,6 @@
 import type { DozorState, SliceMarker, SliceReason } from "../../types";
 import type { Logger } from "../logger";
 
-// ── Event map ────────────────────────────────────────
-
 export interface DozorEventMap {
   "state:change": { from: DozorState; to: DozorState };
   "event:buffered": { bufferSize: number };
@@ -15,11 +13,9 @@ export interface DozorEventMap {
   error: { source: string; error: unknown };
 }
 
-// ── Emitter class ────────────────────────────────────
-
 export type Handler<T> = T extends void ? () => void : (data: T) => void;
 
-/** Events that are too noisy to log by default (emitted on every rrweb event). */
+/** Skipped from `logger.log` — `event:buffered` fires on every rrweb event and would flood the console. */
 const SILENT_EVENTS = new Set<keyof DozorEventMap>(["event:buffered"]);
 
 export class Emitter {

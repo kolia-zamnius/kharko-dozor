@@ -160,7 +160,6 @@ describe("Dozor facade", () => {
       dozor.release({ discard: true });
 
       expect(dozor.isHeld).toBe(false);
-      // No new flush fetch should have been queued by release(discard).
       expect(fetchMock.mock.calls.length).toBe(fetchCallsBefore);
     });
   });
