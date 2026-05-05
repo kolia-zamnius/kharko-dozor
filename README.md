@@ -1,23 +1,25 @@
-# Kharko Dozor
+# Dozor SDK packages
 
 Open-source session recording and replay platform — and a learning project. See what your users actually do — clicks, scrolls, navigation — without video. Lightweight DOM mutation tracking powered by [rrweb](https://github.com/rrweb-io/rrweb). Free for everyone, forever.
 
 Built under the **Kharko** brand, inspired by Kharkiv, Ukraine.
 
+📚 **Documentation**: [kharko-dozor.vercel.app/documentation](https://kharko-dozor.vercel.app/documentation) — full SDK reference, dashboard guide, self-host recipe, architecture deep-dives.
+
 ## Packages
 
-| Package                               | Description                                    | README                                         |
-| ------------------------------------- | ---------------------------------------------- | ---------------------------------------------- |
-| [`@kharko/dozor`](dozor/)             | Framework-agnostic session recording SDK (npm) | [dozor/README.md](dozor/README.md)             |
-| [`@kharko/dozor-react`](dozor-react/) | React Context + hook for `@kharko/dozor` (npm) | [dozor-react/README.md](dozor-react/README.md) |
+| Package                               | Description                                    | README                                         | Docs                                                             |
+| ------------------------------------- | ---------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------- |
+| [`@kharko/dozor`](dozor/)             | Framework-agnostic session recording SDK (npm) | [dozor/README.md](dozor/README.md)             | [SDK → @kharko/dozor](https://kharko-dozor.vercel.app/documentation/sdk/dozor) |
+| [`@kharko/dozor-react`](dozor-react/) | React Context + hook for `@kharko/dozor` (npm) | [dozor-react/README.md](dozor-react/README.md) | [SDK → @kharko/dozor-react](https://kharko-dozor.vercel.app/documentation/sdk/dozor-react) |
 
 ## Dashboard
 
-The web dashboard (Next.js app) lives in a separate repo: [kharko-dozor-dashboard](https://github.com/kolia-zamnius/kharko-dozor-dashboard).
+The web dashboard (Next.js app) lives in a separate repo: [kharko-dozor-dashboard](https://github.com/kolia-zamnius/kharko-dozor-dashboard). Use the [public demo](https://kharko-dozor.vercel.app) to evaluate, then self-host your own.
 
 ## Architecture
 
-The SDK follows a modular event-driven architecture with clear separation of concerns:
+Modular event-driven SDK with clear separation of concerns:
 
 ```
 dozor/src/
@@ -48,37 +50,18 @@ Modules communicate via typed Emitter — no direct dependencies between them. T
 
 TypeScript · rrweb · tsup · pnpm workspaces
 
-## Getting started
-
-### Prerequisites
-
-- Node.js 20+
-- pnpm 10+
-
-### Setup
+## Quick start (local dev)
 
 ```bash
-git clone https://github.com/kolia-zamnius/kharko-dozor.git
-cd kharko-dozor
+git clone https://github.com/kolia-zamnius/kharko-dozor-packages.git
+cd kharko-dozor-packages
 pnpm install
+pnpm build
 ```
 
-### Scripts
+Requires **Node.js 20+** and **pnpm 10+**.
 
-| Command            | Description                          |
-| ------------------ | ------------------------------------ |
-| `pnpm build`       | Build all packages                   |
-| `pnpm build:dozor` | Build `@kharko/dozor` SDK            |
-| `pnpm build:react` | Build `@kharko/dozor-react`          |
-| `pnpm dev:dozor`   | Watch mode for `@kharko/dozor`       |
-| `pnpm dev:react`   | Watch mode for `@kharko/dozor-react` |
-
-### Running a specific package
-
-```bash
-pnpm -F @kharko/dozor <script>
-pnpm -F @kharko/dozor-react <script>
-```
+Per-package scripts and contribution conventions: [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 ## License
 

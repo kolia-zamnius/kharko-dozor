@@ -1,6 +1,8 @@
 # Contributing
 
-Kharko Dozor SDK packages are open source and welcoming to contributions. PRs are reviewed on a best-effort basis.
+Dozor SDK packages are open source and welcoming to contributions. PRs are reviewed on a best-effort basis.
+
+📚 **API reference + integration patterns**: [kharko-dozor.vercel.app/documentation/sdk](https://kharko-dozor.vercel.app/documentation/sdk) — every option, lifecycle method, edge case. The MDX source lives in the [dashboard repo](https://github.com/kolia-zamnius/kharko-dozor-dashboard); doc-only PRs go there.
 
 ## Quick start
 
@@ -13,9 +15,9 @@ pnpm build
 
 Requires **Node.js 20+** and **pnpm 10+**.
 
-### Scripts
+## Scripts
 
-`package.json` only carries CI entries plus per-package shorthand for sub-scope (`build:dozor`, `dev:react`, etc.). One-off ad-hoc runs (coverage, single-test reruns) go through `pnpm -F` / `pnpm exec` directly.
+`package.json` carries CI entries plus per-package shorthand for sub-scope (`build:dozor`, `dev:react`, etc.). One-off ad-hoc runs (coverage, single-test reruns) go through `pnpm -F` / `pnpm exec` directly.
 
 | Command                            | What it does                                              |
 | ---------------------------------- | --------------------------------------------------------- |
@@ -112,7 +114,7 @@ Welcomed:
 - Improvements to existing patterns (spotted an inconsistency? flag it).
 - Performance work in the recorder / transport hot path.
 - Privacy masking robustness.
-- Documentation — README clarifications, JSDoc, comments where intent isn't obvious.
+- Documentation — README clarifications, JSDoc, comments where intent isn't obvious. SDK-reference doc edits live in the [dashboard repo](https://github.com/kolia-zamnius/kharko-dozor-dashboard) under `src/app/(docs)/documentation/_content/sdk/`.
 
 Open an **issue first** for:
 
