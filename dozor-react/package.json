@@ -1,6 +1,6 @@
 {
   "name": "@kharko/dozor-react",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "React bindings for @kharko/dozor session recording SDK",
   "license": "MIT",
   "repository": {
