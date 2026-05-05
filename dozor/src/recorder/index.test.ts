@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import type { DozorOptions } from "../types";
 import { Dozor } from "./index";
 
@@ -23,12 +23,12 @@ function resetSingleton(): void {
 }
 
 describe("Dozor facade", () => {
-  let fetchMock: ReturnType<typeof vi.fn>;
+  let fetchMock: Mock<typeof fetch>;
 
   beforeEach(() => {
     sessionStorage.clear();
     resetSingleton();
-    fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
   });
 
@@ -179,14 +179,14 @@ describe("Dozor facade", () => {
         ([url]) => typeof url === "string" && url.includes("/sessions/cancel"),
       );
       expect(cancelCall).toBeDefined();
-      expect(cancelCall![1].body).toBe(JSON.stringify({ sessionId: sid }));
+      expect(cancelCall![1]!.body).toBe(JSON.stringify({ sessionId: sid }));
     });
   });
 
   describe("subscribe", () => {
     it("notifies subscribers when state changes via lifecycle methods", () => {
       const dozor = Dozor.init({ ...BASE_OPTIONS, autoStart: false });
-      const listener = vi.fn();
+      const listener = vi.fn<() => void>();
       dozor.subscribe(listener);
 
       dozor.start();
@@ -196,7 +196,7 @@ describe("Dozor facade", () => {
 
     it("the unsubscribe function stops further notifications", () => {
       const dozor = Dozor.init({ ...BASE_OPTIONS, autoStart: false });
-      const listener = vi.fn();
+      const listener = vi.fn<() => void>();
       const unsubscribe = dozor.subscribe(listener);
 
       unsubscribe();

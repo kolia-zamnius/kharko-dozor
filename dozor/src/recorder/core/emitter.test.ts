@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { createLogger } from "../logger";
-import { Emitter } from "./emitter";
+import { Emitter, type DozorEventMap, type Handler } from "./emitter";
 
 describe("Emitter", () => {
   it("delivers an emitted payload to a registered handler", () => {
     const emitter = new Emitter(createLogger(false));
-    const handler = vi.fn();
+    const handler = vi.fn<Handler<DozorEventMap["flush:complete"]>>();
 
     emitter.on("flush:complete", handler);
     emitter.emit("flush:complete", { eventCount: 5, success: true });
@@ -16,7 +16,7 @@ describe("Emitter", () => {
 
   it("returns an unsubscribe function from on()", () => {
     const emitter = new Emitter(createLogger(false));
-    const handler = vi.fn();
+    const handler = vi.fn<Handler<DozorEventMap["idle:start"]>>();
 
     const unsubscribe = emitter.on("idle:start", handler);
     unsubscribe();

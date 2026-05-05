@@ -1,17 +1,19 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Emitter } from "../core/emitter";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import { Emitter, type DozorEventMap, type Handler } from "../core/emitter";
 import { createLogger } from "../logger";
 import { FlushScheduler } from "./flush-scheduler";
+
+type FlushTriggerHandler = Handler<DozorEventMap["flush:trigger"]>;
 
 describe("FlushScheduler", () => {
   let emitter: Emitter;
   let scheduler: FlushScheduler;
-  let triggerHandler: ReturnType<typeof vi.fn>;
+  let triggerHandler: Mock<FlushTriggerHandler>;
 
   beforeEach(() => {
     vi.useFakeTimers();
     emitter = new Emitter(createLogger(false));
-    triggerHandler = vi.fn();
+    triggerHandler = vi.fn<FlushTriggerHandler>();
     emitter.on("flush:trigger", triggerHandler);
   });
 

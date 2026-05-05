@@ -3,12 +3,16 @@ import type { Logger } from "../logger";
 export type PageChangeCallback = (url: string, pathname: string) => void;
 
 /**
- * Monitors URL changes in single-page applications.
+ * Monitors pathname changes in single-page applications.
  * Intercepts `history.pushState`, `history.replaceState`, and the `popstate` event.
+ *
+ * Hash-only and query-only changes are intentionally ignored — they don't
+ * represent a real page navigation and would otherwise produce spurious
+ * slice markers (e.g. `#section` anchor jumps, `?utm=...` rewrites).
  */
 export class PageTracker {
   private callback: PageChangeCallback;
-  private lastUrl: string;
+  private lastPathname: string;
   private origPushState: typeof history.pushState;
   private origReplaceState: typeof history.replaceState;
   private logger: Logger;
@@ -16,9 +20,9 @@ export class PageTracker {
   constructor(callback: PageChangeCallback, logger: Logger) {
     this.callback = callback;
     this.logger = logger;
-    this.lastUrl = location.href;
+    this.lastPathname = location.pathname;
 
-    this.logger.log("PageTracker: initialized (url: %s)", this.lastUrl);
+    this.logger.log("PageTracker: initialized (pathname: %s)", this.lastPathname);
 
     // Save originals
     this.origPushState = history.pushState.bind(history);
@@ -53,10 +57,10 @@ export class PageTracker {
   };
 
   private check(): void {
-    const url = location.href;
-    if (url === this.lastUrl) return;
-    this.logger.log("PageTracker: navigation detected (%s → %s)", this.lastUrl, url);
-    this.lastUrl = url;
-    this.callback(url, location.pathname);
+    const pathname = location.pathname;
+    if (pathname === this.lastPathname) return;
+    this.logger.log("PageTracker: navigation detected (%s → %s)", this.lastPathname, pathname);
+    this.lastPathname = pathname;
+    this.callback(location.href, pathname);
   }
 }

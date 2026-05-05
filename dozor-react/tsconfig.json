@@ -11,8 +11,7 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "outDir": "dist",
-    "rootDir": "src"
+    "noEmit": true
   },
   "include": ["src", "vitest.config.ts", "vitest.setup.ts"]
 }

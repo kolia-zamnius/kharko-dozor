@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Emitter } from "../core/emitter";
+import { Emitter, type DozorEventMap, type Handler } from "../core/emitter";
 import { createLogger } from "../logger";
 import { SliceManager } from "./slice-manager";
 
@@ -30,7 +30,7 @@ describe("SliceManager", () => {
   });
 
   it("startNewSlice increments index and emits slice:new", () => {
-    const handler = vi.fn();
+    const handler = vi.fn<Handler<DozorEventMap["slice:new"]>>();
     emitter.on("slice:new", handler);
 
     manager.startNewSlice("idle");
@@ -44,7 +44,7 @@ describe("SliceManager", () => {
   });
 
   it("uses provided url/pathname when given (used by PageTracker)", () => {
-    const handler = vi.fn();
+    const handler = vi.fn<Handler<DozorEventMap["slice:new"]>>();
     emitter.on("slice:new", handler);
 
     manager.startNewSlice("navigation", "https://app.example.com/checkout?x=1", "/checkout");

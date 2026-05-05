@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Emitter } from "../core/emitter";
+import { Emitter, type DozorEventMap, type Handler } from "../core/emitter";
 import { createLogger } from "../logger";
 import { IdleDetector } from "./idle-detector";
 
@@ -19,7 +19,7 @@ describe("IdleDetector", () => {
 
   it("starts not idle and reports idle once threshold elapses without activity", () => {
     detector = new IdleDetector(emitter, createLogger(false), 5_000);
-    const handler = vi.fn();
+    const handler = vi.fn<Handler<DozorEventMap["idle:start"]>>();
     emitter.on("idle:start", handler);
 
     detector.start();
@@ -33,7 +33,7 @@ describe("IdleDetector", () => {
 
   it("resets the timer when activity arrives before the threshold", () => {
     detector = new IdleDetector(emitter, createLogger(false), 5_000);
-    const handler = vi.fn();
+    const handler = vi.fn<Handler<DozorEventMap["idle:start"]>>();
     emitter.on("idle:start", handler);
 
     detector.start();
@@ -62,7 +62,7 @@ describe("IdleDetector", () => {
 
   it("dispose() unsubscribes from activity and cancels the pending timer", () => {
     detector = new IdleDetector(emitter, createLogger(false), 5_000);
-    const handler = vi.fn();
+    const handler = vi.fn<Handler<DozorEventMap["idle:start"]>>();
     emitter.on("idle:start", handler);
 
     detector.start();

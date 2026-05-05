@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createLogger } from "../logger";
-import { Emitter } from "./emitter";
+import { Emitter, type DozorEventMap, type Handler } from "./emitter";
 import { StateMachine, type Transition } from "./state-machine";
 
 function makeMachine() {
@@ -97,7 +97,7 @@ describe("StateMachine", () => {
 
   describe("emission", () => {
     it("emits state:change with from/to on a successful transition", () => {
-      const handler = vi.fn();
+      const handler = vi.fn<Handler<DozorEventMap["state:change"]>>();
       emitter.on("state:change", handler);
 
       machine.transition("START");
@@ -106,7 +106,7 @@ describe("StateMachine", () => {
     });
 
     it("does not emit when a transition is rejected", () => {
-      const handler = vi.fn();
+      const handler = vi.fn<Handler<DozorEventMap["state:change"]>>();
       emitter.on("state:change", handler);
 
       machine.transition("PAUSE");

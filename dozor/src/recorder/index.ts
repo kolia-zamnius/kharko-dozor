@@ -20,7 +20,7 @@ import { Transport } from "./transport";
 const DEFAULT_FLUSH_INTERVAL = 60_000;
 const DEFAULT_BATCH_SIZE = 2_000;
 const DEFAULT_FETCH_TIMEOUT = 10_000;
-const IDLE_THRESHOLD = 30_000;
+const IDLE_THRESHOLD = 60_000;
 
 export class Dozor {
   private static instance: Dozor | null = null;

@@ -1,7 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Emitter } from "../core/emitter";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import { Emitter, type DozorEventMap, type Handler } from "../core/emitter";
 import { createLogger } from "../logger";
 import { VisibilityManager } from "./visibility-manager";
+
+type FlushTriggerHandler = Handler<DozorEventMap["flush:trigger"]>;
+type VisibilityHiddenHandler = Handler<DozorEventMap["visibility:hidden"]>;
+type VisibilityVisibleHandler = Handler<DozorEventMap["visibility:visible"]>;
 
 function setVisibility(state: "hidden" | "visible"): void {
   // jsdom's `Document.prototype.visibilityState` is a Web IDL binding that
@@ -24,15 +28,15 @@ function fireVisibilityChange(): void {
 describe("VisibilityManager", () => {
   let emitter: Emitter;
   let manager: VisibilityManager;
-  let flushHandler: ReturnType<typeof vi.fn>;
-  let visibilityHidden: ReturnType<typeof vi.fn>;
-  let visibilityVisible: ReturnType<typeof vi.fn>;
+  let flushHandler: Mock<FlushTriggerHandler>;
+  let visibilityHidden: Mock<VisibilityHiddenHandler>;
+  let visibilityVisible: Mock<VisibilityVisibleHandler>;
 
   beforeEach(() => {
     emitter = new Emitter(createLogger(false));
-    flushHandler = vi.fn();
-    visibilityHidden = vi.fn();
-    visibilityVisible = vi.fn();
+    flushHandler = vi.fn<FlushTriggerHandler>();
+    visibilityHidden = vi.fn<VisibilityHiddenHandler>();
+    visibilityVisible = vi.fn<VisibilityVisibleHandler>();
     emitter.on("flush:trigger", flushHandler);
     emitter.on("visibility:hidden", visibilityHidden);
     emitter.on("visibility:visible", visibilityVisible);
