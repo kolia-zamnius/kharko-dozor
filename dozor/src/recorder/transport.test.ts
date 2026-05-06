@@ -161,7 +161,7 @@ describe("Transport", () => {
   });
 
   describe("sendKeepalive", () => {
-    it("does nothing when there are no events and no markers", () => {
+    it("does nothing when payload has no events", () => {
       transport.sendKeepalive(makePayload(0));
       expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -191,6 +191,44 @@ describe("Transport", () => {
       const last = body.events.at(-1) as { timestamp: number };
       const original = payload.events.at(-1) as eventWithTime;
       expect(last.timestamp).toBe(original.timestamp);
+    });
+
+    it("preserves Meta(type=4) + FullSnapshot(type=2) events when trimming — replay needs them to seed DOM", () => {
+      fetchMock.mockResolvedValue(mockResponse(200));
+
+      // One Meta + one FullSnapshot at the head, then 200 incrementals — total well past the 60 KB cap.
+      const t0 = 1_700_000_000_000;
+      const meta = { type: 4, data: { href: "https://example.com", width: 1920, height: 1080 }, timestamp: t0 };
+      const fullSnapshot = {
+        type: 2,
+        data: { node: { padding: "x".repeat(2_000) } },
+        timestamp: t0 + 1,
+      };
+      const incrementals = Array.from({ length: 200 }, (_, i) => ({
+        type: 3,
+        data: { padding: "x".repeat(500) },
+        timestamp: t0 + 100 + i,
+      }));
+      const payload = {
+        sessionId: "session-1",
+        events: [meta, fullSnapshot, ...incrementals] as unknown as eventWithTime[],
+      };
+
+      transport.sendKeepalive(payload);
+
+      const init = fetchMock.mock.calls[0]![1] as RequestInit;
+      const body = JSON.parse(init.body as string);
+      expect((init.body as string).length).toBeLessThanOrEqual(60 * 1024);
+      // Meta + FullSnapshot survive the trim.
+      const types: number[] = body.events.map((e: { type: number }) => e.type);
+      expect(types).toContain(4);
+      expect(types).toContain(2);
+      // Some incrementals must have been dropped (we can't keep all 200).
+      expect(body.events.length).toBeLessThan(202);
+      // The kept tail of incrementals is contiguous with the original tail (most recent preserved).
+      const kept = body.events.filter((e: { type: number }) => e.type === 3) as Array<{ timestamp: number }>;
+      const lastIncremental = incrementals.at(-1)!;
+      expect(kept.at(-1)!.timestamp).toBe(lastIncremental.timestamp);
     });
   });
 });
