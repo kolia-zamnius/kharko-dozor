@@ -33,11 +33,9 @@ dozor/src/
     │   └── state-machine.ts  # FSM with transition table (State)
     ├── pipeline/             # Event flow
     │   ├── event-buffer.ts   # Storage + drain (Pipeline)
-    │   ├── flush-scheduler.ts # Timer + batch flush (Strategy)
-    │   └── idle-detector.ts  # Activity monitor
-    ├── slicing/              # Recording segmentation
-    │   ├── slice-manager.ts  # Slice creation + snapshots
-    │   └── page-tracker.ts   # SPA navigation
+    │   └── flush-scheduler.ts # Timer + batch flush (Strategy)
+    ├── markers/              # rrweb custom-event markers
+    │   └── url-tracker.ts    # SPA navigation → `dozor:url` marker + FullSnapshot
     └── browser/              # Browser API integration
         ├── visibility-manager.ts
         ├── session.ts

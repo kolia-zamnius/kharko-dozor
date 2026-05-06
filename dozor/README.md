@@ -98,16 +98,21 @@ Recipes for Next.js / Express / `rewrites`: [Documentation → SDK → Tunnel pa
 ## TypeScript
 
 ```ts
+import { DOZOR_MARKER_TAG } from "@kharko/dozor";
 import type {
+  DozorMarkerTag,
   DozorOptions,
   DozorState,
+  DozorUrlMarker,
   IngestPayload,
-  SessionMetadata,
   Logger,
+  SessionMetadata,
   UserIdentity,
   UserTraits,
 } from "@kharko/dozor";
 ```
+
+`DOZOR_MARKER_TAG` is the const map of in-stream marker tags (`url` / `identity`) emitted as rrweb custom events (type=5). Use it to detect markers in the event stream without relying on string literals.
 
 Full type reference: [Documentation → SDK → Edge cases](https://kharko-dozor.vercel.app/documentation/sdk/edge-cases#typescript-types).
 
