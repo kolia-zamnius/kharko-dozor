@@ -109,25 +109,28 @@ export class Transport {
   }
 
   // No compression — `CompressionStream` is async and may not flush before page close.
-  // Drops oldest events when payload exceeds `KEEPALIVE_BYTE_LIMIT` (keep most recent for context).
+  // Trim policy when payload exceeds `KEEPALIVE_BYTE_LIMIT`: ALWAYS preserve every
+  // Meta (type=4) and FullSnapshot (type=2) event — those seed the replayer's DOM,
+  // dropping them would leave the server with an unreplayable "incrementals only"
+  // stream. Trim the oldest *incremental* events (type=3/5/6) until the payload
+  // fits.
   sendKeepalive(payload: IngestPayload): void {
     if (payload.events.length === 0) return;
 
     this.logger.log("sendKeepalive: %d events", payload.events.length);
 
-    let trimmedEvents = payload.events;
     const buildJson = (evts: eventWithTime[]): string => JSON.stringify({ ...payload, events: evts });
-
+    let trimmedEvents = payload.events;
     let json = buildJson(trimmedEvents);
 
     if (json.length > KEEPALIVE_BYTE_LIMIT && trimmedEvents.length > 1) {
-      const overhead = buildJson([]).length;
-      const available = KEEPALIVE_BYTE_LIMIT - overhead;
-      const avgSize = (json.length - overhead) / trimmedEvents.length;
-      const keepCount = Math.max(1, Math.floor(available / avgSize));
-      trimmedEvents = trimmedEvents.slice(-keepCount);
+      trimmedEvents = trimToFitKeepalive(payload.events, buildJson, KEEPALIVE_BYTE_LIMIT);
       json = buildJson(trimmedEvents);
-      this.logger.warn("sendKeepalive: trimmed to %d/%d events (byte limit)", keepCount, payload.events.length);
+      this.logger.warn(
+        "sendKeepalive: trimmed to %d/%d events (byte limit, bootstraps preserved)",
+        trimmedEvents.length,
+        payload.events.length,
+      );
     }
 
     try {
@@ -150,4 +153,45 @@ export class Transport {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+const RRWEB_FULL_SNAPSHOT_TYPE = 2;
+const RRWEB_META_TYPE = 4;
+
+function isBootstrapEvent(event: eventWithTime): boolean {
+  return event.type === RRWEB_META_TYPE || event.type === RRWEB_FULL_SNAPSHOT_TYPE;
+}
+
+// Keeps every bootstrap event (Meta + FullSnapshot), drops oldest incrementals first.
+// Falls back to "bootstraps-only" if even those exceed the cap — replay is degraded
+// but at least openable.
+function trimToFitKeepalive(
+  events: readonly eventWithTime[],
+  buildJson: (evts: eventWithTime[]) => string,
+  cap: number,
+): eventWithTime[] {
+  const bootstraps = events.filter(isBootstrapEvent);
+  const incrementals = events.filter((e) => !isBootstrapEvent(e));
+
+  if (buildJson(bootstraps).length > cap) {
+    return bootstraps;
+  }
+
+  // Binary-search the largest tail of incrementals that still fits with all bootstraps.
+  let lo = 0;
+  let hi = incrementals.length;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    const candidate = mergeChronological(bootstraps, incrementals.slice(-mid));
+    if (buildJson(candidate).length <= cap) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return mergeChronological(bootstraps, incrementals.slice(-lo));
+}
+
+function mergeChronological(a: readonly eventWithTime[], b: readonly eventWithTime[]): eventWithTime[] {
+  return [...a, ...b].sort((x, y) => x.timestamp - y.timestamp);
 }
