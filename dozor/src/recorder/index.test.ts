@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
-import type { DozorOptions } from "../types";
+import { record } from "rrweb";
+import { DOZOR_MARKER_TAG, type DozorOptions } from "../types";
 import { Dozor } from "./index";
 
 vi.mock("rrweb", () => ({
   record: Object.assign(
     vi.fn(() => vi.fn() /* stop fn */),
-    { takeFullSnapshot: vi.fn() },
+    { takeFullSnapshot: vi.fn(), addCustomEvent: vi.fn() },
   ),
 }));
 
@@ -28,6 +29,8 @@ describe("Dozor facade", () => {
   beforeEach(() => {
     sessionStorage.clear();
     resetSingleton();
+    vi.mocked(record.addCustomEvent).mockClear();
+    vi.mocked(record.takeFullSnapshot).mockClear();
     fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
   });
@@ -126,6 +129,45 @@ describe("Dozor facade", () => {
       const dozor = Dozor.init({ ...BASE_OPTIONS });
       expect(dozor.userId).toBeNull();
     });
+
+    it("emits a `dozor:identity` custom event when called during recording", () => {
+      const dozor = Dozor.init({ ...BASE_OPTIONS });
+
+      dozor.identify("user_42", { plan: "pro" });
+
+      expect(record.addCustomEvent).toHaveBeenCalledWith(DOZOR_MARKER_TAG.identity, {
+        userId: "user_42",
+        traits: { plan: "pro" },
+      });
+    });
+
+    it("does not emit a custom event when called before recording starts", () => {
+      const dozor = Dozor.init({ ...BASE_OPTIONS, autoStart: false });
+
+      dozor.identify("user_42");
+
+      expect(record.addCustomEvent).not.toHaveBeenCalled();
+    });
+
+    it("preserves identity set before start() — survives the session-begin boundary", () => {
+      const dozor = Dozor.init({ ...BASE_OPTIONS, autoStart: false });
+      dozor.identify("user_42", { plan: "pro" });
+      expect(dozor.userId).toBe("user_42");
+
+      dozor.start();
+
+      expect(dozor.userId).toBe("user_42");
+    });
+
+    it("clears identity on stop() — next start() begins anonymous", () => {
+      const dozor = Dozor.init({ ...BASE_OPTIONS });
+      dozor.identify("user_42");
+
+      dozor.stop();
+      dozor.start();
+
+      expect(dozor.userId).toBeNull();
+    });
   });
 
   describe("hold / release", () => {
@@ -179,6 +221,33 @@ describe("Dozor facade", () => {
       );
       expect(cancelCall).toBeDefined();
       expect(cancelCall![1]!.body).toBe(JSON.stringify({ sessionId: sid }));
+    });
+  });
+
+  describe("SPA navigation marker", () => {
+    it("emits `dozor:url` + takes a full snapshot on pushState navigation", () => {
+      Dozor.init({ ...BASE_OPTIONS });
+
+      history.pushState(null, "", "/checkout");
+
+      expect(record.addCustomEvent).toHaveBeenCalledWith(DOZOR_MARKER_TAG.url, {
+        url: location.href,
+        pathname: "/checkout",
+      });
+      expect(record.takeFullSnapshot).toHaveBeenCalled();
+
+      history.replaceState(null, "", "/");
+    });
+
+    it("ignores hash-only changes — no marker, no snapshot", () => {
+      Dozor.init({ ...BASE_OPTIONS });
+
+      history.pushState(null, "", `${location.pathname}#section`);
+
+      expect(record.addCustomEvent).not.toHaveBeenCalledWith(DOZOR_MARKER_TAG.url, expect.anything());
+      expect(record.takeFullSnapshot).not.toHaveBeenCalled();
+
+      history.replaceState(null, "", "/");
     });
   });
 

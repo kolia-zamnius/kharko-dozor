@@ -108,12 +108,10 @@ export class Transport {
     }
   }
 
-  /**
-   * No compression — async ops may not flush before page close.
-   * Drops oldest events when payload exceeds `KEEPALIVE_BYTE_LIMIT` (keep most recent for context).
-   */
+  // No compression — `CompressionStream` is async and may not flush before page close.
+  // Drops oldest events when payload exceeds `KEEPALIVE_BYTE_LIMIT` (keep most recent for context).
   sendKeepalive(payload: IngestPayload): void {
-    if (payload.events.length === 0 && !payload.sliceMarkers?.length) return;
+    if (payload.events.length === 0) return;
 
     this.logger.log("sendKeepalive: %d events", payload.events.length);
 

@@ -20,7 +20,7 @@ You will get an initial acknowledgement within **72 hours** and a substantive re
 
 **In scope:**
 
-- The `@kharko/dozor` core SDK — recording engine, transport (`fetch`, gzip via `CompressionStream`, keepalive on unload, retry with backoff), session storage, slice management, privacy masking (`data-dozor-mask`, `data-dozor-block`, input/media masking).
+- The `@kharko/dozor` core SDK — recording engine, transport (`fetch`, gzip via `CompressionStream`, keepalive on unload, retry with backoff), session storage, custom-event markers (`dozor:url` / `dozor:identity`), privacy masking (`data-dozor-mask`, `data-dozor-block`, input/media masking).
 - The `@kharko/dozor-react` bindings — `DozorProvider`, `useDozor` hook, `useSyncExternalStore` integration, SSR snapshot handling.
 - How the SDK derives URLs (ingest, session cancel) from the configured `endpoint`.
 - The `X-Dozor-Public-Key` header handling.

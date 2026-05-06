@@ -105,7 +105,7 @@ More patterns: [Documentation → SDK → Recipes](https://kharko-dozor.vercel.a
 const dozor = useDozor();
 
 // Reactive state
-dozor.state; // "not_initialized" | "idle" | "recording" | "paused" | "stopped"
+dozor.state; // "not_initialized" | "idle" | "recording" | "paused"
 dozor.sessionId; // string | null
 dozor.isRecording; // boolean
 dozor.isPaused; // boolean

@@ -100,7 +100,7 @@ Skip if nothing operational is needed — its absence is itself a signal.
 - **Strict TypeScript.** No `any`, no `as unknown as`, no `@ts-ignore`. Reach for a discriminated union or a type guard instead.
 - **Logger interface, not `console.*`.** Every subsystem accepts a `Logger` in its constructor; pass it through to children. `debug: false` (default) returns a no-op logger — zero production overhead.
 - **Disposable for handles.** Anything that allocates timers, listeners, or observers owns a `dispose()` that fully cleans up.
-- **Discriminated unions over boolean flags.** Lifecycle state, slice reasons, transport modes — let TypeScript exhaustiveness-check.
+- **Discriminated unions over boolean flags.** Lifecycle state, transport modes, custom-event marker tags — let TypeScript exhaustiveness-check.
 - **Public API only via `src/index.ts`.** No deep imports — consumers import from the package root.
 - **Versions move in lockstep.** Both packages bump together. A change in core that consumers will see triggers a bump in both, even if the React surface didn't change.
 - **No copy/paste between packages.** If two files start to diverge from a shared idea, extract a helper or move it into core and re-export.

@@ -2,7 +2,7 @@ import type { Logger } from "../logger";
 
 const SESSION_KEY = "dozor_session_id";
 
-/** Tab-scoped: `sessionStorage` (not `localStorage`) so SPA navigations keep one session and a new tab gets a fresh one. */
+// `sessionStorage` (not `localStorage`) — SPA navigations keep one session, new tab starts fresh.
 export function getSessionId(logger: Logger): string {
   try {
     const existing = sessionStorage.getItem(SESSION_KEY);
