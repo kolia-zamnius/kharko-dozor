@@ -2,7 +2,7 @@ import { getRecordConsolePlugin } from "@rrweb/rrweb-plugin-console-record";
 import type { RecordPlugin } from "@rrweb/types";
 import type { eventWithTime } from "rrweb";
 import { record } from "rrweb";
-import type { DozorOptions, DozorState, UserIdentity, UserTraits } from "../types";
+import { DOZOR_MARKER_TAG, type DozorOptions, type DozorState, type UserIdentity, type UserTraits } from "../types";
 import { collectMetadata } from "./browser/metadata";
 import { clearSessionId, getSessionId } from "./browser/session";
 import { VisibilityManager } from "./browser/visibility-manager";
@@ -10,17 +10,14 @@ import { Emitter } from "./core/emitter";
 import { StateMachine } from "./core/state-machine";
 import type { Logger } from "./logger";
 import { createLogger } from "./logger";
+import { UrlTracker } from "./markers/url-tracker";
 import { EventBuffer } from "./pipeline/event-buffer";
 import { FlushScheduler } from "./pipeline/flush-scheduler";
-import { IdleDetector } from "./pipeline/idle-detector";
-import { PageTracker } from "./slicing/page-tracker";
-import { SliceManager } from "./slicing/slice-manager";
 import { Transport } from "./transport";
 
 const DEFAULT_FLUSH_INTERVAL = 60_000;
 const DEFAULT_BATCH_SIZE = 2_000;
 const DEFAULT_FETCH_TIMEOUT = 10_000;
-const IDLE_THRESHOLD = 60_000;
 
 export class Dozor {
   private static instance: Dozor | null = null;
@@ -28,11 +25,9 @@ export class Dozor {
   private emitter: Emitter;
   private stateMachine: StateMachine;
   private eventBuffer: EventBuffer;
-  private idleDetector: IdleDetector;
-  private sliceManager: SliceManager;
   private flushScheduler: FlushScheduler;
   private transport: Transport;
-  private pageTracker: PageTracker | null = null;
+  private urlTracker: UrlTracker | null = null;
   private logger: Logger;
 
   private _sessionId: string | null = null;
@@ -80,8 +75,6 @@ export class Dozor {
     this.stateMachine = new StateMachine(this.emitter, this.logger);
     this.transport = new Transport(endpoint, options.apiKey, this.logger, fetchTimeout);
     this.eventBuffer = new EventBuffer(this.emitter, this.logger);
-    this.idleDetector = new IdleDetector(this.emitter, this.logger, IDLE_THRESHOLD);
-    this.sliceManager = new SliceManager(this.emitter, this.logger);
     this.flushScheduler = new FlushScheduler(this.emitter, this.logger, {
       interval: flushInterval,
       batchSize,
@@ -140,7 +133,7 @@ export class Dozor {
                 success: true,
               });
             } else {
-              this.eventBuffer.prepend(payload.events, payload.sliceMarkers);
+              this.eventBuffer.prepend(payload.events);
               logger.warn("flush: re-queued %d events after failed send", payload.events.length);
               emitter.emit("flush:complete", {
                 eventCount: payload.events.length,
@@ -149,7 +142,7 @@ export class Dozor {
             }
           })
           .catch((err) => {
-            this.eventBuffer.prepend(payload.events, payload.sliceMarkers);
+            this.eventBuffer.prepend(payload.events);
             logger.warn("flush: re-queued %d events after unexpected error", payload.events.length);
             emitter.emit("error", { source: "transport", error: err });
           });
@@ -174,10 +167,6 @@ export class Dozor {
         this.beginRecording();
         this.notify();
       }
-    });
-
-    emitter.on("slice:new", ({ marker }) => {
-      this.eventBuffer.addSliceMarker(marker);
     });
 
     emitter.on("error", ({ source, error }) => {
@@ -331,40 +320,46 @@ export class Dozor {
     this.notify();
   }
 
-  /** Identity rides on metadata — sent on the next batch and on every later batch until session end. */
+  // Pre-start identity rides on the next batch's metadata; in-recording change additionally lands as a timestamped marker in the event stream.
   identify(userId: string, traits?: UserTraits): void {
     this.logger.log("identify(): userId=%s", userId);
     this._userIdentity = { userId, traits };
     this.eventBuffer.updateIdentity(this._userIdentity);
+    if (this.stopRecording) {
+      record.addCustomEvent(DOZOR_MARKER_TAG.identity, { userId, traits });
+    }
     this.notify();
   }
 
   private beginSession(): void {
     this._sessionId = getSessionId(this.logger);
-    this.eventBuffer.setMetadata(collectMetadata(this.logger));
-    this._userIdentity = null;
-    this.sliceManager.reset();
-    this.eventBuffer.addSliceMarker(this.sliceManager.createInitialMarker());
-    this.pageTracker = new PageTracker((url, pathname) => {
+    const metadata = collectMetadata(this.logger);
+    // identity set BEFORE start() (autoStart:false flow) is the only case `_userIdentity` is non-null here.
+    // endSession() owns the cross-session reset; this hop just propagates the pre-set identity into fresh metadata.
+    if (this._userIdentity) {
+      metadata.userIdentity = this._userIdentity;
+    }
+    this.eventBuffer.setMetadata(metadata);
+    this.urlTracker = new UrlTracker((url, pathname) => {
+      record.addCustomEvent(DOZOR_MARKER_TAG.url, { url, pathname });
+      record.takeFullSnapshot();
       this.emitter.emit("flush:trigger", { reason: "navigation" });
-      this.sliceManager.startNewSlice("navigation", url, pathname);
     }, this.logger);
     this.logger.log("beginSession: %s", this._sessionId);
   }
 
   private endSession(): void {
     this.logger.log("endSession: %s", this._sessionId);
-    this.pageTracker?.destroy();
-    this.pageTracker = null;
+    this.urlTracker?.destroy();
+    this.urlTracker = null;
     clearSessionId(this.logger);
     this._sessionId = null;
     this.eventBuffer.clear();
-    this.sliceManager.reset();
     this._userIdentity = null;
   }
 
   private beginRecording(): void {
-    this.logger.log("beginRecording: starting rrweb + scheduler + idle detector");
+    this.logger.log("beginRecording: starting rrweb + scheduler");
     const blockParts: string[] = [`[${this.privacyBlockAttribute}]`];
     if (this.privacyBlockMedia) {
       blockParts.push("img", "video", "audio", "picture", "canvas", "embed", "object");
@@ -382,25 +377,18 @@ export class Dozor {
       }) ?? null;
 
     this.flushScheduler.start();
-    this.idleDetector.start();
   }
 
   private teardownRecording(): void {
-    this.logger.log("teardownRecording: stopping rrweb + scheduler + idle detector");
+    this.logger.log("teardownRecording: stopping rrweb + scheduler");
     if (this.stopRecording) {
       this.stopRecording();
       this.stopRecording = null;
     }
     this.flushScheduler.dispose();
-    this.idleDetector.dispose();
   }
 
   private onEvent(event: eventWithTime): void {
-    // First post-idle event → snapshot via new slice; the snapshot guard in SliceManager prevents recursion.
-    if (this.idleDetector.isIdle && !this.sliceManager.isSnapshotting) {
-      this.sliceManager.startNewSlice("idle");
-    }
-
-    this.eventBuffer.push(event, this.sliceManager.index);
+    this.eventBuffer.push(event);
   }
 }

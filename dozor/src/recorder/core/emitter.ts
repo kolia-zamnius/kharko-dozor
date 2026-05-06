@@ -1,11 +1,9 @@
-import type { DozorState, SliceMarker, SliceReason } from "../../types";
+import type { DozorState } from "../../types";
 import type { Logger } from "../logger";
 
 export interface DozorEventMap {
   "state:change": { from: DozorState; to: DozorState };
   "event:buffered": { bufferSize: number };
-  "idle:start": void;
-  "slice:new": { index: number; reason: SliceReason; marker: SliceMarker };
   "flush:trigger": { reason: "timer" | "batch" | "unload" | "manual" | "navigation" };
   "flush:complete": { eventCount: number; success: boolean };
   "visibility:hidden": void;
@@ -15,7 +13,7 @@ export interface DozorEventMap {
 
 export type Handler<T> = T extends void ? () => void : (data: T) => void;
 
-/** Skipped from `logger.log` — `event:buffered` fires on every rrweb event and would flood the console. */
+// Silenced — `event:buffered` fires on every rrweb event and would flood the console at debug level.
 const SILENT_EVENTS = new Set<keyof DozorEventMap>(["event:buffered"]);
 
 export class Emitter {

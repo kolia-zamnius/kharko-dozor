@@ -31,7 +31,7 @@ export class StateMachine {
     return this.resolve(action) !== null;
   }
 
-  /** Emits `state:change` on success. */
+  // Emits `state:change` on success.
   transition(action: Transition): boolean {
     const next = this.resolve(action);
     if (!next) {

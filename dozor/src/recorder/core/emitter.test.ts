@@ -16,11 +16,11 @@ describe("Emitter", () => {
 
   it("returns an unsubscribe function from on()", () => {
     const emitter = new Emitter(createLogger(false));
-    const handler = vi.fn<Handler<DozorEventMap["idle:start"]>>();
+    const handler = vi.fn<Handler<DozorEventMap["visibility:hidden"]>>();
 
-    const unsubscribe = emitter.on("idle:start", handler);
+    const unsubscribe = emitter.on("visibility:hidden", handler);
     unsubscribe();
-    emitter.emit("idle:start");
+    emitter.emit("visibility:hidden");
 
     expect(handler).not.toHaveBeenCalled();
   });

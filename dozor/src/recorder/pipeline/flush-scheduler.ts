@@ -33,7 +33,7 @@ export class FlushScheduler {
     }, this.interval);
   }
 
-  /** Stops timer + listener; caller drains explicitly if a final flush is needed. */
+  // Caller drains explicitly if a final flush is needed — stop() does not.
   stop(): void {
     if (this.timer) {
       clearInterval(this.timer);
