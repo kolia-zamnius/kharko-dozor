@@ -25,7 +25,7 @@ Dozor.init({
 });
 ```
 
-That's it. Recording starts immediately, events ship to your endpoint every 60 seconds (or sooner — buffer fill / tab background / page unload).
+That's it. Recording starts immediately and the bootstrap snapshot (Meta + FullSnapshot) ships within ~1 s — the rest of the events follow every 60 seconds (or sooner — buffer fill / tab background / page unload).
 
 ## Identify the user
 

@@ -20,11 +20,11 @@ You will get an initial acknowledgement within **72 hours** and a substantive re
 
 **In scope:**
 
-- The `@kharko/dozor` core SDK — recording engine, transport (`fetch`, gzip via `CompressionStream`, keepalive on unload, retry with backoff), session storage, custom-event markers (`dozor:url` / `dozor:identity`), privacy masking (`data-dozor-mask`, `data-dozor-block`, input/media masking).
+- The `@kharko/dozor` core SDK — recording engine, transport (`fetch`, gzip via `CompressionStream` for regular flushes + sync gzip via `fflate` for keepalive bodies, keepalive on unload, eager bootstrap flush after `start()`, retry with backoff), session storage, custom-event markers (`dozor:url` / `dozor:identity`), privacy masking (`data-dozor-mask`, `data-dozor-block`, input/media masking).
 - The `@kharko/dozor-react` bindings — `DozorProvider`, `useDozor` hook, `useSyncExternalStore` integration, SSR snapshot handling.
 - How the SDK derives URLs (ingest, session cancel) from the configured `endpoint`.
 - The `X-Dozor-Public-Key` header handling.
-- The keepalive size-trim path (60 KB browser cap).
+- The keepalive sync-gzip + iterative-trim path that fits the buffered payload under the 64 KB browser cap.
 
 **Out of scope:**
 
@@ -43,9 +43,10 @@ Worth knowing when assessing a report:
 - **Privacy defaults**: `privacyMaskInputs: true`, `privacyMaskAttribute: "data-dozor-mask"`, `privacyBlockAttribute: "data-dozor-block"`. Media (`img`, `video`, `audio`, `picture`, `canvas`, `embed`, `object`) is **not** blocked by default — opt-in via `privacyBlockMedia: true`.
 - **Session ID** stored in `sessionStorage` (per-tab, cleared on tab close). Falls back to in-memory if `sessionStorage` is unavailable; not persisted across reloads in that case.
 - **Console recording is on by default** (`recordConsole: true`) — captures `console.log/warn/error/info/debug`. If the consuming app logs sensitive data, the integrator should opt out via `recordConsole: false`.
-- **Transport** uses gzip via the browser-native `CompressionStream` when available; falls back to uncompressed JSON. No custom crypto.
+- **Transport** uses gzip via the browser-native `CompressionStream` for regular (live-page) flushes; falls back to uncompressed JSON when `CompressionStream` is unavailable. Keepalive flushes (`beforeunload` / `visibilitychange:hidden`) sync-gzip via the bundled `fflate` because `CompressionStream`'s async drain can't complete during page unload. No custom crypto.
 - **Retry policy**: 3 attempts with exponential backoff (1 s, 2 s, 4 s) on network errors and 5xx. 4xx is not retried. Failed batches re-queue to the buffer, capped at 10 000 events — oldest dropped during extended outages.
-- **Keepalive flushes** on `beforeunload` are size-capped at 60 KB (browser limit) — oldest events are trimmed if a payload is over the cap.
+- **Keepalive flushes** carry sync-gzipped bodies so a CSS-heavy page's bootstrap (Meta + FullSnapshot, 200–400 KB raw) fits the browser's ~64 KB keepalive cap after compression. If the gzipped payload still overshoots, an iterative trim drops the oldest *incremental* events while always preserving every Meta(4) + FullSnapshot(2) the replayer needs to seed DOM.
+- **Eager bootstrap flush** fires immediately after `start()` so Meta + FullSnapshot reach the server within ~1 s via the regular gzip + retry path — a fast tab close before the 60 s timer can't strand them in the buffer.
 
 ## Things that would count as a bug
 
@@ -56,7 +57,7 @@ Non-exhaustive — reach out even if you're unsure:
 - The recorder capturing `password`-type inputs even when masking is on.
 - The session ID or `apiKey` being readable from another tab/origin via something other than expected `sessionStorage` semantics.
 - The retry / re-queue path leaking events from one session into another.
-- The keepalive-trim logic causing payloads to exceed the 60 KB browser cap and silently drop.
+- A keepalive payload reaching the wire above the 64 KB browser cap (the sync-gzip + bootstrap-preserving trim should always bring it under).
 - The cancel-URL derivation in `Transport.deleteSession` (`endpoint.replace("/ingest", "/sessions/cancel")`) being abusable for SSRF or path traversal against the configured `endpoint`.
 - Any path that sends rrweb data without the `X-Dozor-Public-Key` header.
 - A ReDoS or unbounded-allocation vector in the recorder's hot path.
