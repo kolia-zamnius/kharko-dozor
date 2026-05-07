@@ -224,6 +224,33 @@ describe("Dozor facade", () => {
     });
   });
 
+  describe("eager bootstrap flush", () => {
+    it("ships Meta + FullSnapshot via the regular send() path right after start() — no waiting on the 60s timer", async () => {
+      // rrweb's emit fires synchronously inside record() when document.readyState is "complete";
+      // simulate that by pumping a Meta + FullSnapshot through the mocked emit callback.
+      vi.mocked(record).mockImplementationOnce((opts: { emit: (e: unknown) => void } & Record<string, unknown>) => {
+        const t = Date.now();
+        opts.emit({ type: 4, data: { href: "https://example.com", width: 1024, height: 768 }, timestamp: t });
+        opts.emit({ type: 2, data: { node: {} }, timestamp: t + 1 });
+        return vi.fn();
+      });
+
+      const dozor = Dozor.init({ ...BASE_OPTIONS, autoStart: false });
+      dozor.start();
+
+      // Eager flush emits sync; send() awaits gzip compression, so let microtasks drain.
+      await vi.waitFor(() => {
+        expect(fetchMock).toHaveBeenCalled();
+      });
+
+      const [url, init] = fetchMock.mock.calls[0]! as [string, RequestInit & { headers: Record<string, string> }];
+      expect(url).toBe(BASE_OPTIONS.endpoint);
+      expect(init.method).toBe("POST");
+      // Regular `send()` route (page is alive), not keepalive.
+      expect(init.keepalive).toBeFalsy();
+    });
+  });
+
   describe("SPA navigation marker", () => {
     it("emits `dozor:url` + takes a full snapshot on pushState navigation", () => {
       Dozor.init({ ...BASE_OPTIONS });
