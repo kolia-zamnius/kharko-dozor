@@ -1,3 +1,4 @@
+import { gzipSync } from "fflate";
 import type { eventWithTime } from "rrweb";
 import type { IngestPayload } from "../types";
 import type { Logger } from "./logger";
@@ -7,6 +8,14 @@ const BASE_DELAY_MS = 1000;
 const COMPRESSION_THRESHOLD = 1_024;
 /** Stay safely under the browser's 64 KB keepalive body limit. */
 const KEEPALIVE_BYTE_LIMIT = 60 * 1024;
+/**
+ * Conservative raw-JSON ceiling used when even the gzipped keepalive payload
+ * overshoots the byte cap. Empirically rrweb event streams compress 4–10×, so
+ * 4× the keepalive cap is a safe headroom — trim to this raw size, re-gzip,
+ * and the result virtually always fits.
+ */
+const KEEPALIVE_RAW_CEILING = KEEPALIVE_BYTE_LIMIT * 4;
+const TEXT_ENCODER = typeof TextEncoder !== "undefined" ? new TextEncoder() : null;
 
 async function gzipCompress(input: string): Promise<Blob> {
   const stream = new Blob([input]).stream().pipeThrough(new CompressionStream("gzip"));
@@ -108,39 +117,62 @@ export class Transport {
     }
   }
 
-  // No compression — `CompressionStream` is async and may not flush before page close.
-  // Trim policy when payload exceeds `KEEPALIVE_BYTE_LIMIT`: ALWAYS preserve every
-  // Meta (type=4) and FullSnapshot (type=2) event — those seed the replayer's DOM,
-  // dropping them would leave the server with an unreplayable "incrementals only"
-  // stream. Trim the oldest *incremental* events (type=3/5/6) until the payload
-  // fits.
+  // Sync-gzip via `fflate` so the body fits the browser's 64KB keepalive cap even
+  // when the buffered FullSnapshot of a CSS-heavy page (Tailwind v4, etc.) would
+  // run uncompressed at 200–400KB. CompressionStream isn't an option here — its
+  // async drain can't complete inside `beforeunload` / `visibilitychange:hidden`.
+  //
+  // Trim policy when even the gzipped payload overshoots the cap: iteratively
+  // halve the raw-JSON budget while preserving every Meta(4) + FullSnapshot(2)
+  // bootstrap event and dropping the oldest incrementals. Stops when trim makes
+  // no further progress (only bootstraps left).
   sendKeepalive(payload: IngestPayload): void {
     if (payload.events.length === 0) return;
 
     this.logger.log("sendKeepalive: %d events", payload.events.length);
 
     const buildJson = (evts: eventWithTime[]): string => JSON.stringify({ ...payload, events: evts });
-    let trimmedEvents = payload.events;
-    let json = buildJson(trimmedEvents);
 
-    if (json.length > KEEPALIVE_BYTE_LIMIT && trimmedEvents.length > 1) {
-      trimmedEvents = trimToFitKeepalive(payload.events, buildJson, KEEPALIVE_BYTE_LIMIT);
-      json = buildJson(trimmedEvents);
+    let trimmedEvents: readonly eventWithTime[] = payload.events;
+    let json = buildJson([...trimmedEvents]);
+    let compressed = gzipString(json);
+
+    let rawCap = KEEPALIVE_RAW_CEILING;
+    while (compressed.byteLength > KEEPALIVE_BYTE_LIMIT) {
+      const next = trimToFitKeepalive(payload.events, buildJson, rawCap);
+      if (next.length === trimmedEvents.length) break; // bootstraps-only floor — can't shrink further.
+      trimmedEvents = next;
+      json = buildJson([...trimmedEvents]);
+      compressed = gzipString(json);
+      rawCap = Math.floor(rawCap / 2);
+    }
+
+    if (trimmedEvents.length < payload.events.length) {
       this.logger.warn(
-        "sendKeepalive: trimmed to %d/%d events (byte limit, bootstraps preserved)",
+        "sendKeepalive: trimmed to %d/%d events (gzip still over cap; bootstraps preserved)",
         trimmedEvents.length,
         payload.events.length,
       );
     }
+
+    this.logger.log(
+      "sendKeepalive: %d events / raw %d → gzip %d bytes",
+      trimmedEvents.length,
+      json.length,
+      compressed.byteLength,
+    );
 
     try {
       fetch(this.endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Content-Encoding": "gzip",
           "X-Dozor-Public-Key": this.apiKey,
         },
-        body: json,
+        // `Uint8Array` body sent verbatim; the gzip is what the server's parse-body
+        // helper decompresses transparently via DecompressionStream.
+        body: compressed,
         keepalive: true,
       }).catch((err) => {
         this.logger.warn("sendKeepalive: failed", err);
@@ -153,6 +185,14 @@ export class Transport {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function gzipString(input: string): Uint8Array {
+  // `TextEncoder` is part of the WHATWG spec and ships in every modern browser; the
+  // SSR path of frameworks like Next.js polyfills it via Node 18+. The `?? new ...()`
+  // fallback covers oddball runtimes where the global isn't constructed yet.
+  const encoder = TEXT_ENCODER ?? new TextEncoder();
+  return gzipSync(encoder.encode(input));
 }
 
 const RRWEB_FULL_SNAPSHOT_TYPE = 2;

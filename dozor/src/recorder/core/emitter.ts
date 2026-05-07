@@ -4,7 +4,7 @@ import type { Logger } from "../logger";
 export interface DozorEventMap {
   "state:change": { from: DozorState; to: DozorState };
   "event:buffered": { bufferSize: number };
-  "flush:trigger": { reason: "timer" | "batch" | "unload" | "manual" | "navigation" };
+  "flush:trigger": { reason: "timer" | "batch" | "unload" | "manual" | "navigation" | "bootstrap" };
   "flush:complete": { eventCount: number; success: boolean };
   "visibility:hidden": void;
   "visibility:visible": void;

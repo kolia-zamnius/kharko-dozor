@@ -1,8 +1,14 @@
+import { gunzipSync } from "fflate";
 import type { eventWithTime } from "rrweb";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import type { IngestPayload } from "../types";
 import { createLogger } from "./logger";
 import { Transport } from "./transport";
+
+function gunzipToJson(body: BodyInit): { sessionId: string; events: eventWithTime[] } {
+  const bytes = body as Uint8Array;
+  return JSON.parse(new TextDecoder().decode(gunzipSync(bytes)));
+}
 
 const ENDPOINT = "https://api.example.com/api/ingest";
 const API_KEY = "dp_test";
@@ -166,7 +172,7 @@ describe("Transport", () => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it("sends with keepalive: true and Content-Type JSON", () => {
+    it("sends keepalive: true with Content-Encoding: gzip — body is sync-gzipped Uint8Array", () => {
       fetchMock.mockResolvedValue(mockResponse(200));
 
       transport.sendKeepalive(makePayload(1));
@@ -174,39 +180,53 @@ describe("Transport", () => {
       const init = fetchMock.mock.calls[0]![1] as RequestInit & { headers: Record<string, string> };
       expect(init.keepalive).toBe(true);
       expect(init.headers["Content-Type"]).toBe("application/json");
+      expect(init.headers["Content-Encoding"]).toBe("gzip");
+      expect(init.body).toBeInstanceOf(Uint8Array);
+
+      // Round-trips back to the original payload shape.
+      const decoded = gunzipToJson(init.body as BodyInit);
+      expect(decoded.sessionId).toBe("session-1");
+      expect(decoded.events).toHaveLength(1);
     });
 
-    it("trims oldest events when payload exceeds the 60KB browser keepalive cap, keeping the most recent", () => {
+    it("a 100 KB raw payload compresses to well under the 60 KB keepalive cap (compression-only path, no trim)", () => {
       fetchMock.mockResolvedValue(mockResponse(200));
 
-      // 200 events × ~500 bytes ≈ 100KB JSON — well above the 60KB cap.
+      // 200 events × ~500 bytes of repeated `x` chars compresses extremely well — single trim is unnecessary.
       const payload = makePayload(200, 500);
       transport.sendKeepalive(payload);
 
       const init = fetchMock.mock.calls[0]![1] as RequestInit;
-      const body = JSON.parse(init.body as string);
-      // Trimmed payload must fit under the cap and preserve order from the tail.
-      expect(body.events.length).toBeLessThan(200);
-      expect((init.body as string).length).toBeLessThanOrEqual(60 * 1024);
-      const last = body.events.at(-1) as { timestamp: number };
-      const original = payload.events.at(-1) as eventWithTime;
-      expect(last.timestamp).toBe(original.timestamp);
+      const body = init.body as Uint8Array;
+      expect(body.byteLength).toBeLessThanOrEqual(60 * 1024);
+
+      // No trim was needed — every original event survives intact.
+      const decoded = gunzipToJson(body);
+      expect(decoded.events).toHaveLength(200);
+      const last = decoded.events.at(-1) as eventWithTime;
+      expect(last.timestamp).toBe(payload.events.at(-1)!.timestamp);
     });
 
-    it("preserves Meta(type=4) + FullSnapshot(type=2) events when trimming — replay needs them to seed DOM", () => {
+    it("preserves Meta(type=4) + FullSnapshot(type=2) when even the gzipped payload overshoots the cap", () => {
       fetchMock.mockResolvedValue(mockResponse(200));
 
-      // One Meta + one FullSnapshot at the head, then 200 incrementals — total well past the 60 KB cap.
+      // High-entropy Meta + FullSnapshot + incrementals — Math.random() output resists gzip,
+      // so the post-compression body crosses the 60 KB cap and the bootstrap-preserving trim engages.
       const t0 = 1_700_000_000_000;
+      const randomChunk = (n: number) => {
+        let s = "";
+        for (let i = 0; i < n; i++) s += Math.random().toString(36).slice(2, 12);
+        return s;
+      };
       const meta = { type: 4, data: { href: "https://example.com", width: 1920, height: 1080 }, timestamp: t0 };
       const fullSnapshot = {
         type: 2,
-        data: { node: { padding: "x".repeat(2_000) } },
+        data: { node: { padding: randomChunk(200) } },
         timestamp: t0 + 1,
       };
-      const incrementals = Array.from({ length: 200 }, (_, i) => ({
+      const incrementals = Array.from({ length: 600 }, (_, i) => ({
         type: 3,
-        data: { padding: "x".repeat(500) },
+        data: { padding: randomChunk(60) },
         timestamp: t0 + 100 + i,
       }));
       const payload = {
@@ -217,18 +237,19 @@ describe("Transport", () => {
       transport.sendKeepalive(payload);
 
       const init = fetchMock.mock.calls[0]![1] as RequestInit;
-      const body = JSON.parse(init.body as string);
-      expect((init.body as string).length).toBeLessThanOrEqual(60 * 1024);
+      const body = init.body as Uint8Array;
+      expect(body.byteLength).toBeLessThanOrEqual(60 * 1024);
+
+      const decoded = gunzipToJson(body);
+      const types = decoded.events.map((e) => e.type);
       // Meta + FullSnapshot survive the trim.
-      const types: number[] = body.events.map((e: { type: number }) => e.type);
       expect(types).toContain(4);
       expect(types).toContain(2);
-      // Some incrementals must have been dropped (we can't keep all 200).
-      expect(body.events.length).toBeLessThan(202);
-      // The kept tail of incrementals is contiguous with the original tail (most recent preserved).
-      const kept = body.events.filter((e: { type: number }) => e.type === 3) as Array<{ timestamp: number }>;
-      const lastIncremental = incrementals.at(-1)!;
-      expect(kept.at(-1)!.timestamp).toBe(lastIncremental.timestamp);
+      // Some incrementals were dropped.
+      expect(decoded.events.length).toBeLessThan(602);
+      // The kept incrementals are the most recent (tail-preserving trim).
+      const keptIncrementals = decoded.events.filter((e) => e.type === 3) as eventWithTime[];
+      expect(keptIncrementals.at(-1)!.timestamp).toBe(incrementals.at(-1)!.timestamp);
     });
   });
 });

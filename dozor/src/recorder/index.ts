@@ -377,6 +377,14 @@ export class Dozor {
       }) ?? null;
 
     this.flushScheduler.start();
+
+    // Eager bootstrap flush — at this point rrweb's `record()` has emitted
+    // Meta + FullSnapshot synchronously into the buffer (when document.readyState
+    // is "complete", which any time the user clicks Start it is). Shipping that
+    // pair via the regular `send()` path (gzip + retry) gets the replayer-seed
+    // events into the database within ~1s, so a fast tab close before the
+    // 60s timer ticks can never strand them in the buffer.
+    this.emitter.emit("flush:trigger", { reason: "bootstrap" });
   }
 
   private teardownRecording(): void {
